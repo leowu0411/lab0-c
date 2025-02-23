@@ -1,14 +1,7 @@
 #!/usr/bin/env bash
 
-# Ensure that the common script exists and is readable, then verify it has no
-# syntax errors and defines the required function.
-common_script="$(dirname "$0")/common.sh"
-[ -r "$common_script" ] || { echo "[!] '$common_script' not found or not readable." >&2; exit 1; }
-bash -n "$common_script" >/dev/null 2>&1 || { echo "[!] '$common_script' contains syntax errors." >&2; exit 1; }
-source "$common_script"
-declare -F set_colors >/dev/null 2>&1 || { echo "[!] '$common_script' does not define the required function." >&2; exit 1; }
-
-set_colors
+# Source the common utilities
+source "$(dirname "$0")/common.sh"
 
 check_github_actions
 
@@ -25,20 +18,6 @@ fi
 
 if ! command -v git &>/dev/null; then
   throw "git not installed."
-fi
-
-# Retrieve git email.
-GIT_EMAIL=$(git config user.email)
-
-# Check if email is set.
-if [ -z "$GIT_EMAIL" ]; then
-  throw "Git email is not set."
-fi
-
-# Validate email using a regex.
-# This regex matches a basic email pattern.
-if ! [[ "$GIT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
-  throw "Git email '$GIT_EMAIL' is not valid."
 fi
 
 # 1. Sleep for a random number of milliseconds
