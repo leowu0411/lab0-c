@@ -11,20 +11,37 @@ HOOK_EDITOR=
 SKIP_DISPLAY_WARNINGS=0
 WARNINGS=
 
-# Ensure that the common script exists and is readable, then verify it has no
-# syntax errors and defines the required function.
-common_script="$(dirname "$0")/../../scripts/common.sh"
-[ -r "$common_script" ] || { echo "[!] '$common_script' not found or not readable." >&2; exit 1; }
-bash -n "$common_script" >/dev/null 2>&1 || { echo "[!] '$common_script' contains syntax errors." >&2; exit 1; }
-source "$common_script"
-declare -F set_colors >/dev/null 2>&1 || { echo "[!] '$common_script' does not define the required function." >&2; exit 1; }
+RED=
+YELLOW=
+BLUE=
+WHITE=
+CYAN=
+NC=
 
+#
+# Set colour variables if the output should be coloured.
+#
+
+set_colors() {
+  local default_color=$(git config --get hooks.goodcommit.color || git config --get color.ui || echo 'auto')
+  if [[ $default_color == 'always' ]] || [[ $default_color == 'auto' && -t 1 ]]; then
+    RED='\033[1;31m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[1;34m'
+    WHITE='\033[1;37m'
+    CYAN='\033[1;36m'
+    NC='\033[0m' # No Color
+  fi
+}
+
+#
 # Set the hook editor, using the same approach as git.
+#
+
 set_editor() {
-  # $GIT_EDITOR appears to always be set to ':' when the hook is executed by Git?
-  # Reference:
-  # - http://stackoverflow.com/q/41468839/885540
-  # - https://github.com/tommarshall/git-good-commit/issues/11
+  # $GIT_EDITOR appears to always be set to `:` when the hook is executed by Git?
+  # ref: http://stackoverflow.com/q/41468839/885540
+  # ref: https://github.com/tommarshall/git-good-commit/issues/11
   # HOOK_EDITOR=$GIT_EDITOR
   test -z "${HOOK_EDITOR}" && HOOK_EDITOR=$(git config --get core.editor)
   test -z "${HOOK_EDITOR}" && HOOK_EDITOR=$VISUAL
@@ -32,7 +49,10 @@ set_editor() {
   test -z "${HOOK_EDITOR}" && HOOK_EDITOR='vi'
 }
 
+#
 # Output prompt help information.
+#
+
 prompt_help() {
   echo -e "${RED}$(cat <<-EOF
 e - edit commit message
@@ -42,14 +62,20 @@ EOF
 )${NC}"
 }
 
+#
 # Add a warning with <line_number> and <msg>.
+#
+
 add_warning() {
   local line_number=$1
   local warning=$2
   WARNINGS[$line_number]="${WARNINGS[$line_number]}$warning;"
 }
 
+#
 # Output warnings.
+#
+
 display_warnings() {
   if [ $SKIP_DISPLAY_WARNINGS -eq 1 ]; then
     # if the warnings were skipped then they should be displayed next time
@@ -72,7 +98,10 @@ EOF
 )${NC}"
 }
 
+#
 # Read the contents of the commit msg into an array of lines.
+#
+
 read_commit_message() {
   # reset commit_msg_lines
   COMMIT_MSG_LINES=()
@@ -234,6 +263,8 @@ build_commit_trailer_regex() {
 }
 
 # Validate the contents of the commmit msg agains the good commit guidelines.
+#
+
 validate_commit_message() {
   # reset warnings
   WARNINGS=()
@@ -361,29 +392,13 @@ validate_commit_message() {
   readarray -t COMMIT_MSG_LINES < "$COMMIT_MSG_FILE"
 
   for i in "${!COMMIT_MSG_LINES[@]}"; do
-    # Skip the first line (the subject) since the limit applies to the body.
-    if [ "$i" -eq 0 ]; then
-      continue
-    fi
-
-    line="${COMMIT_MSG_LINES[$i]}"
-
-    # Skip lines that are comments.
-    if [[ "$line" =~ ^[[:space:]]*# ]]; then
-      continue
-    fi
-
+    LINE="${COMMIT_MSG_LINES[$i]}"
     # Trim leading and trailing whitespace.
-    trimmed_line="${line#"${line%%[![:space:]]*}"}"
-    trimmed_line="${trimmed_line%"${trimmed_line##*[![:space:]]}"}"
-    line_number=$((i+1))
-
-    # Check if the trimmed line is longer than 72 characters and does not match a URL
-    # or commit trailer. The URL regex is used inline by stripping its leading caret.
-    if [ "${#trimmed_line}" -gt 72 ] && \
-       ! [[ "$trimmed_line" =~ ${URL_REGEX#^} ]] && \
-       ! [[ "$trimmed_line" =~ $TRAILER_REGEX ]]; then
-      add_warning "$line_number" "Wrap the body at 72 characters (${#trimmed_line} chars)"
+    TRIMMED_LINE="${LINE#"${LINE%%[![:space:]]*}"}"
+    TRIMMED_LINE="${TRIMMED_LINE%"${TRIMMED_LINE##*[![:space:]]}"}"
+    LINE_NUMBER=$((i+1))
+    if [ "${#TRIMMED_LINE}" -gt 72 ] && ! [[ "$TRIMMED_LINE" =~ $URL_REGEX ]]; then
+      add_warning "$LINE_NUMBER" "Wrap the body at 72 characters (${#TRIMMED_LINE} chars)"
     fi
   done
 
@@ -406,21 +421,15 @@ validate_commit_message() {
 
   # 7c. Alert if the commit subject starts with "Implementation"
   # ------------------------------------------------------------------------------
-  if [[ "${COMMIT_SUBJECT_TO_PROCESS}" =~ ^(First|My|Implementation|Implementations|Creation|Modification|Queue) ]]; then
+  if [[ "${COMMIT_SUBJECT_TO_PROCESS}" =~ ^(First|My|Implementation|Creation|Modification) ]]; then
     add_warning 1 "Commit subject should use imperative mood"
-  fi
-
-  # 7d. Alert if the commit subject uses the pattern "Implement of ..."
-  if [[ "${COMMIT_SUBJECT_TO_PROCESS}" =~ ^(Implement|Realize|Update|Finish|Code)[[:space:]]+of[[:space:]]+ ]]; then
-    add_warning 1 "Avoid using 'of' immediately after the verb"
   fi
 
   # 8. Use the body to explain what and why vs. how
   # ------------------------------------------------------------------------------
 
-  # Count non-comment, non-blank lines, excluding lines that match the trailer regex.
-  NON_COMMENT_COUNT=$(sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "${COMMIT_MSG_FILE}" | \
-                      sed -E "/$TRAILER_REGEX/d" | wc -l | xargs)
+  # Count non-comment, non-blank lines excluding "Change-Id:".
+  NON_COMMENT_COUNT=$(sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d;/^[[:space:]]*Change-Id:/d' "${COMMIT_MSG_FILE}" | wc -l | xargs)
 
   # If queue.c is modified and the commit message is oversimplified, forbid generic subjects.
   if git diff --cached --name-only | grep -Eq '(^|/)queue\.c$'; then
@@ -481,7 +490,9 @@ validate_commit_message() {
     add_warning 1 "Commit message appears to be written in Chinese: $MISSPELLED_WORDS"
   fi
 
-  MSG_FOR_SPELLCHECK_LINE_FINDING=$(echo "$FULL_COMMIT_MSG_WITH_SPACE" | sed -E \
+  # Remove quoted text and commit hashes from $FULL_COMMIT_MSG for spell checking.
+  # Handles commit references like "commit 7d05741" (short) or full 40-char hashes.
+  MSG_FOR_SPELLCHECK=$(echo "$FULL_COMMIT_MSG" | sed -E \
     -e "s/(['\"][^'\"]*['\"])//g" \
     -e "s/\bcommit[[:space:]]+[0-9a-fA-F]{7,40}\b/commit/g")
   MSG_FOR_SPELLCHECK=$(echo "$MSG_FOR_SPELLCHECK_LINE_FINDING" | sed '/^[[:space:]]*$/d')
@@ -489,11 +500,7 @@ validate_commit_message() {
   # Use aspell to list misspelled words according to American English, ignoring quoted text.
   MISSPELLED_WORDS=$(echo "$MSG_FOR_SPELLCHECK" | $ASPELL --lang=en --list --home-dir=scripts --personal=aspell-pws)
   if [ -n "$MISSPELLED_WORDS" ]; then
-    results=$(get_all_match_positions "$MSG_FOR_SPELLCHECK_LINE_FINDING" "$MISSPELLED_WORDS")
-
-    while read -r result; do
-      add_warning "${result#*:}" "Avoid using non-American English words: ${result%%:*}"
-    done <<< "$results"
+    add_warning 1 "Avoid using non-American English words"
   fi
 }
 
@@ -503,6 +510,7 @@ CHANGE_ID_AFTER="Bug|Issue|Test"
 MSG="$1"
 
 # Ensure that a unique Change-Id is present, and generate one if it is not.
+#
 # Partially taken from Gerrit Code Review 3.3.0-56-gbcecc47463
 add_change_id() {
   clean_message=`sed -e '
@@ -664,13 +672,13 @@ _gen_changeid() {
   _gen_changeid_input | git hash-object -t commit --stdin
 }
 
+#
 # It's showtime.
+#
 
 set_colors
 
 set_editor
-
-build_commit_trailer_regex
 
 if tty >/dev/null 2>&1; then
   TTY=$(tty)
