@@ -99,3 +99,5 @@ make_random_string() {
     echo "${raw_rand:0:pos}${sub_str}${raw_rand:pos}"
   fi
 }
+
+set_colors
