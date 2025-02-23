@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 
-# Ensure that the common script exists and is readable, then verify it has no
-# syntax errors and defines the required function.
-common_script="$(dirname "$0")/../../scripts/common.sh"
-[ -r "$common_script" ] || { echo "[!] '$common_script' not found or not readable." >&2; exit 1; }
-bash -n "$common_script" >/dev/null 2>&1 || { echo "[!] '$common_script' contains syntax errors." >&2; exit 1; }
-source "$common_script"
-declare -F set_colors >/dev/null 2>&1 || { echo "[!] '$common_script' does not define the required function." >&2; exit 1; }
+CPPCHECK_unmatched=
+for f in *.c; do
+    CPPCHECK_unmatched="$CPPCHECK_unmatched --suppress=unmatchedSuppression:$f"
+done
 
 # Build unmatched suppressions for each *.c file.
 cppcheck_build_unmatched() {
@@ -116,68 +113,48 @@ fi
 
 CLANG_FORMAT=$(which clang-format)
 if [ $? -ne 0 ]; then
-  throw "clang-format not installed. Unable to check source file format policy."
+    echo "[!] clang-format not installed. Unable to check source file format policy." >&2
+    exit 1
 fi
 
 CPPCHECK=$(which cppcheck)
 mkdir -p .out
 if [ $? -ne 0 ]; then
-  throw "cppcheck not installed. Unable to perform static analysis."
+    echo "[!] cppcheck not installed. Unable to perform static analysis." >&2
+    exit 1
 fi
 
-# Check that cppcheck's version is at least 1.90.
-cppcheck_ver=$("$CPPCHECK" --version)
-if echo "$cppcheck_ver" | grep -qE '^Cppcheck\s2'; then
-  : # Version 2.x is acceptable.
-else
-  # For version 1.x, extract the minor version and compare.
-  minor_version=$(echo "$cppcheck_ver" | sed -Ee 's/Cppcheck 1\.([0-9]+)/\1/;q')
-  if [ "$minor_version" -lt 90 ]; then
-    throw "cppcheck version must be at least 1.90.\n\
-    See Developer Info for building cppcheck from source:\n\
-        https://cppcheck.sourceforge.io/devinfo/"
-  fi
+# Expected Cppcheck version is 1.90+
+# First, Cppcheck 2.x
+if [ -z "$($CPPCHECK --version | grep -E '^Cppcheck\s2')" ]; then
+    # Second, Cppcheck 1.x
+    CPPCHECK_VER=$($CPPCHECK --version | sed -Ee 's/Cppcheck 1.([0-9]+)/\1/;q')
+    if [ $CPPCHECK_VER -lt 90 ]; then
+        echo "[!] cppcheck version must be at least 1.90." >&2
+        echo -e "    Check 'Developer Info' for building Cppcheck from source:\n" \
+                "          https://cppcheck.sourceforge.net/devinfo/" >&2
+        exit 1
+    fi
 fi
 
 ASPELL=$(which aspell)
 if [ $? -ne 0 ]; then
-  throw "aspell not installed. Unable to do spelling check."
+    echo "[!] aspell not installed. Unable to do spelling check." >&2
+    exit 1
 fi
 if [ -z "$(aspell dump dicts | grep -E '^en$')" ]; then
-  throw "aspell-en not installed. Unable to do spelling check."
+    echo "[!] aspell-en not installed. Unable to do spelling check." >&2
+    exit 1
 fi
 
 DIFF=$(which colordiff)
 if [ $? -ne 0 ]; then
-  DIFF=diff
+    DIFF=diff
 fi
 
-if command -v sha1sum >/dev/null 2>&1; then
-  SHA1SUM="sha1sum"
-elif command -v shasum >/dev/null 2>&1; then
-  SHA1SUM="shasum"
-else
-  throw "sha1sum or shasum not installed."
-fi
-
-# Get staged filenames (added, copied, or modified) into an array.
-FILES=($(git diff --cached --name-only --diff-filter=ACM))
-binary_files=()
-
-for file in "${FILES[@]}"; do
-  # Get MIME info for the file.
-  mime_info=$(file --mime "$file")
-  # Extract a friendly filename (everything before the colon).
-  name=$(file "$file" | cut -d ":" -f1)
-
-  if echo "$mime_info" | grep -qi binary; then
-    binary_files+=("$name")
-    printf "${RED}[!]${NC} '${YELLOW}$name${NC}' appears to be a binary blob.\n"
-  fi
-done
-
-if [ "${#binary_files[@]}" -gt 0 ]; then
-  printf "${RED}[!]${NC} Binary data found.\n"
+SHA1SUM=$(which sha1sum)
+if [ $? -ne 0 ]; then
+    SHA1SUM=shasum
 fi
 
 C_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h|hpp)$")
@@ -187,25 +164,24 @@ for FILE in $C_FILES; do
   newfile=$(mktemp ${tempdir}/${nf}.XXXXXX) || exit 1
   basename=$(basename $FILE)
 
-  source="${tempdir}/${basename}"
-  mv $nf $source
-  cp .clang-format $tempdir
-  $CLANG_FORMAT $source > $newfile 2>> /dev/null
-  $DIFF -u -p -B \
-        --label="modified $FILE" --label="expected coding style" \
-        "${source}" "${newfile}"
-  r=$?
-  rm -rf "${tempdir}"
-  if [ $r != 0 ] ; then
-    echo "[!] $FILE does not follow the consistent coding style." >&2
-    RETURN=1
-  fi
-  if [ $RETURN -eq 1 ]; then
-    echo "" >&2
-    echo "Make sure you indent as the following:" >&2
-    echo "    clang-format -i $FILE" >&2
-    echo
-  fi
+    source="${tempdir}/${basename}"
+    mv $nf $source
+    cp .clang-format $tempdir
+    $CLANG_FORMAT $source > $newfile 2>> /dev/null
+    $DIFF -u -p -B --label="modified $FILE" --label="expected coding style" \
+          "${source}" "${newfile}"
+    r=$?
+    rm -rf "${tempdir}"
+    if [ $r != 0 ] ; then
+        echo "[!] $FILE does not follow the consistent coding style." >&2
+        RETURN=1
+    fi
+    if [ $RETURN -eq 1 ]; then
+        echo "" >&2
+        echo "Make sure you indent as the following:" >&2
+        echo "    clang-format -i $FILE" >&2
+        echo
+    fi
 done
 
 # Check syntax for changed shell scripts
@@ -251,9 +227,10 @@ if [ "${#FILES[@]}" -gt 0 ]; then
   done
 fi
 
-$SHA1SUM -c scripts/checksums 2>/dev/null >/dev/null
+$SHA1SUM -c scripts/checksums >/dev/null
 if [ $? -ne 0 ]; then
-  throw "You are not allowed to change the header file queue.h or list.h"
+    echo "[!] You are not allowed to change the header file queue.h or list.h" >&2
+    exit 1
 fi
 
 # Prevent unsafe functions
@@ -309,12 +286,12 @@ fi
 if test $(git diff --cached --name-only --diff-filter=A -z $against |
           LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
 then
-  cat <<\EOF
+    cat <<\EOF
 ERROR: Attempt to add a non-ASCII file name.
 This can cause problems if you want to work with people on other platforms.
 To be portable it is advisable to rename the file.
 EOF
-  RETURN=1
+    RETURN=1
 fi
 
 exit $RETURN
