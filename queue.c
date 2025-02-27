@@ -18,7 +18,8 @@ void q_free(struct list_head *head)
 {
     if (!head)
         return;
-    element_t *entry = NULL, *safe;
+    element_t *entry = NULL, *safe = NULL;
+    // cppcheck-suppress unusedLabel
     list_for_each_entry_safe (entry, safe, head, list) {
         q_release_element(entry);
     }
@@ -142,7 +143,7 @@ bool q_delete_mid(struct list_head *head)
 bool q_delete_dup(struct list_head *head)
 {
     // https://leetcode.com/problems/remove-duplicates-from-sorted-list-ii/
-    if (!head || list_empty(head))
+    if (!head || list_empty(head) || list_is_singular(head))
         return false;
     struct list_head *ptr = head->next;
     element_t *cur = list_entry(ptr, element_t, list),
@@ -169,7 +170,7 @@ bool q_delete_dup(struct list_head *head)
 void q_swap(struct list_head *head)
 {
     // https://leetcode.com/problems/swap-nodes-in-pairs/
-    if (!head || list_empty(head))
+    if (!head || list_empty(head) || list_is_singular(head))
         return;
     struct list_head *slow = head->next, *fast = slow->next;
     while (slow != head && fast != head) {
@@ -189,7 +190,7 @@ void q_swap(struct list_head *head)
 /* Reverse elements in queue */
 void q_reverse(struct list_head *head)
 {
-    if (!head || list_empty(head))
+    if (!head || list_empty(head) || list_is_singular(head))
         return;
     struct list_head *cur = head;
     do {
@@ -206,7 +207,7 @@ void q_reverse(struct list_head *head)
 void q_reverseK(struct list_head *head, int k)
 {
     // https://leetcode.com/problems/reverse-nodes-in-k-group/
-    if (!head || list_empty(head))
+    if (!head || list_empty(head) || list_is_singular(head))
         return;
     int round = q_size(head) / k;
     struct list_head *cur = head->next, *prev_tail, *new_tail;
