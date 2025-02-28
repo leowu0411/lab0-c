@@ -36,7 +36,7 @@ bool q_insert_head(struct list_head *head, char *s)
     if (!node)
         return false;
 
-    int str_len = sizeof(s) + 1;
+    int str_len = strlen(s) + 1;
     node->value = malloc(str_len * sizeof(char));
     if (!node->value) {
         free(node);
@@ -58,7 +58,7 @@ bool q_insert_tail(struct list_head *head, char *s)
     if (!node)
         return false;
 
-    int str_len = sizeof(s) + 1;
+    int str_len = strlen(s) + 1;
     node->value = malloc(str_len * sizeof(char));
     if (!node->value) {
         free(node);
