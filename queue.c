@@ -230,7 +230,37 @@ void q_reverseK(struct list_head *head, int k)
 }
 
 /* Sort elements of queue in ascending/descending order */
-void q_sort(struct list_head *head, bool descend) {}
+void q_sort(struct list_head *head, bool descend)
+{
+    if (!head || list_empty(head) || list_is_singular(head))
+        return;
+    struct list_head less, greater;
+    element_t *node = NULL, *safe = NULL;
+    element_t *pivot = list_first_entry(head, element_t, list);
+    list_del(&pivot->list);
+    INIT_LIST_HEAD(&less);
+    INIT_LIST_HEAD(&greater);
+    // cppcheck-suppress unusedLabel
+    list_for_each_entry_safe (node, safe, head, list) {
+        if (strcmp(node->value, pivot->value) < 0) {
+            list_del(&node->list);
+            list_add_tail(&node->list, &less);
+        } else {
+            list_del(&node->list);
+            list_add_tail(&node->list, &greater);
+        }
+    }
+    q_sort(&less, descend);
+    q_sort(&greater, descend);
+    list_add(&pivot->list, head);
+    if (descend) {
+        list_splice(&greater, head);
+        list_splice_tail(&less, head);
+    } else {
+        list_splice(&less, head);
+        list_splice_tail(&greater, head);
+    }
+}
 
 /* Remove every node which has a node with a strictly less value anywhere to
  * the right side of it */
