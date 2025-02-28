@@ -124,17 +124,15 @@ bool q_delete_mid(struct list_head *head)
     if (!head || list_empty(head))
         return false;
 
-    struct list_head **fest = &head->next, **slow;
+    struct list_head *slow = head->next, *fast = slow->next;
     element_t *dlt;
-    if (!(*fest))
-        return NULL;
-    for (slow = &head; (*fest)->next && (*fest)->next->next;
-         fest = &(*fest)->next->next) {
-        slow = &(*slow)->next;
+    for (; fast->next != head && fast->next->next != head;
+         fast = fast->next->next) {
+        slow = slow->next;
     }
-    slow = &(*slow)->next;
-    dlt = list_entry(*slow, typeof(*dlt), list);
-    *slow = (*slow)->next;
+    slow = slow->next;
+    dlt = list_entry(slow, typeof(*dlt), list);
+    list_del(slow);
     q_release_element(dlt);
     return true;
 }
