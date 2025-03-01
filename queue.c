@@ -229,37 +229,48 @@ void q_reverseK(struct list_head *head, int k)
     }
 }
 
+static inline void merge_two_list(struct list_head *head1,
+                                  struct list_head *head2,
+                                  bool descend)
+{
+    if (!head1 || !head2 || list_empty(head2))
+        return;
+    if (list_empty(head1)) {
+        list_splice_init(head2, head1);
+        return;
+    }
+    struct list_head *q1 = head1->next, *q2 = head2->next;
+    for (; q1 != head1 && q2 != head2;) {
+        element_t *e1 = list_entry(q1, element_t, list);
+        element_t *e2 = list_entry(q2, element_t, list);
+        if ((!descend && strcmp(e2->value, e1->value) <= 0) ||
+            (descend && strcmp(e2->value, e1->value) >= 0)) {
+            struct list_head *next_q2 = q2->next;
+            list_del(q2);
+            list_add(q2, q1->prev);
+            q2 = next_q2;
+        } else
+            q1 = q1->next;
+    }
+    if (!list_empty(head2))
+        list_splice_tail_init(head2, head1);
+}
+
 /* Sort elements of queue in ascending/descending order */
 void q_sort(struct list_head *head, bool descend)
 {
     if (!head || list_empty(head) || list_is_singular(head))
         return;
-    struct list_head less, greater;
-    element_t *node = NULL, *safe = NULL;
-    element_t *pivot = list_first_entry(head, element_t, list);
-    list_del(&pivot->list);
-    INIT_LIST_HEAD(&less);
-    INIT_LIST_HEAD(&greater);
-    // cppcheck-suppress unusedLabel
-    list_for_each_entry_safe (node, safe, head, list) {
-        if (strcmp(node->value, pivot->value) < 0) {
-            list_del(&node->list);
-            list_add_tail(&node->list, &less);
-        } else {
-            list_del(&node->list);
-            list_add_tail(&node->list, &greater);
-        }
+    struct list_head *slow = head->next, *fast = slow->next;
+    for (; fast->next != head && fast->next->next != head;
+         fast = fast->next->next) {
+        slow = slow->next;
     }
-    q_sort(&less, descend);
-    q_sort(&greater, descend);
-    list_add(&pivot->list, head);
-    if (descend) {
-        list_splice(&greater, head);
-        list_splice_tail(&less, head);
-    } else {
-        list_splice(&less, head);
-        list_splice_tail(&greater, head);
-    }
+    struct list_head left;
+    list_cut_position(&left, head, slow);
+    q_sort(&left, descend);
+    q_sort(head, descend);
+    merge_two_list(head, &left, descend);
 }
 
 /* Remove every node which has a node with a strictly less value anywhere to
@@ -309,34 +320,6 @@ int q_descend(struct list_head *head)
     }
     return count;
 }
-
-static inline void merge_two_list(struct list_head *head1,
-                                  struct list_head *head2,
-                                  bool descend)
-{
-    if (!head1 || !head2 || list_empty(head2))
-        return;
-    if (list_empty(head1)) {
-        list_splice_init(head2, head1);
-        return;
-    }
-    struct list_head *q1 = head1->next, *q2 = head2->next;
-    for (; q1 != head1 && q2 != head2;) {
-        element_t *e1 = list_entry(q1, element_t, list);
-        element_t *e2 = list_entry(q2, element_t, list);
-        if ((!descend && strcmp(e2->value, e1->value) < 0) ||
-            (descend && strcmp(e2->value, e1->value) > 0)) {
-            struct list_head *next_q2 = q2->next;
-            list_del(q2);
-            list_add(q2, q1->prev);
-            q2 = next_q2;
-        } else
-            q1 = q1->next;
-    }
-    if (!list_empty(head2))
-        list_splice_tail_init(head2, head1);
-}
-
 
 /* Merge all the queues into one sorted queue, which is in ascending/descending
  * order */
