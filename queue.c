@@ -290,18 +290,20 @@ int q_ascend(struct list_head *head)
 int q_descend(struct list_head *head)
 {
     // https://leetcode.com/problems/remove-nodes-from-linked-list/
-    if (!head || list_empty(head) || list_is_singular(head))
+    if (!head || list_empty(head))
         return 0;
-    char *min = list_entry(head->next, element_t, list)->value;
-    element_t *entry, *safe;
-    int count = 0;
-    // cppcheck-suppress unusedLabel
-    list_for_each_entry_safe (entry, safe, head, list) {
-        if (strcmp(entry->value, min) > 0) {
-            list_del(&entry->list);
-            q_release_element(entry);
+    struct list_head *max = head->prev;
+    int count = 1;
+    while (max != head) {
+        if (max->prev == head)
+            break;
+        element_t *cur = list_entry(max, element_t, list);
+        element_t *pre = list_entry(max->prev, element_t, list);
+        if (strcmp(cur->value, pre->value) > 0) {
+            list_del(&pre->list);
+            q_release_element(pre);
         } else {
-            min = entry->value;
+            max = max->prev;
             count++;
         }
     }
