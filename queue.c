@@ -20,7 +20,7 @@ void q_free(struct list_head *head)
         return;
     element_t *entry = NULL, *safe = NULL;
     // cppcheck-suppress unusedLabel
-    list_for_each_entry_safe (entry, safe, head, list) {
+    list_for_each_entry_safe(entry, safe, head, list) {
         q_release_element(entry);
     }
     free(head);
@@ -78,11 +78,10 @@ element_t *q_remove_head(struct list_head *head, char *sp, size_t bufsize)
 
     element_t *node;
     node = list_entry(head->next, typeof(*node), list);
-    if (!(node->value) || !sp)
-        return node;
-
-    strncpy(sp, node->value, bufsize - 1);
-    sp[bufsize - 1] = '\0';
+    if (node->value && sp) {
+        strncpy(sp, node->value, bufsize - 1);
+        sp[bufsize - 1] = '\0';
+    }
     list_del_init(&node->list);
     return node;
 }
@@ -95,11 +94,10 @@ element_t *q_remove_tail(struct list_head *head, char *sp, size_t bufsize)
 
     element_t *node;
     node = list_entry(head->prev, typeof(*node), list);
-    if (!(node->value) || !sp)
-        return node;
-
-    strncpy(sp, node->value, bufsize - 1);
-    sp[bufsize - 1] = '\0';
+    if (node->value && sp) {
+        strncpy(sp, node->value, bufsize - 1);
+        sp[bufsize - 1] = '\0';
+    }
     list_del_init(&node->list);
     return node;
 }
@@ -284,7 +282,7 @@ int q_ascend(struct list_head *head)
     element_t *entry, *safe;
     int count = 0;
     // cppcheck-suppress unusedLabel
-    list_for_each_entry_safe (entry, safe, head, list) {
+    list_for_each_entry_safe(entry, safe, head, list) {
         if (strcmp(entry->value, max) < 0) {
             list_del(&entry->list);
             q_release_element(entry);
