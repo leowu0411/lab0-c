@@ -42,6 +42,7 @@
 
 #define ENOUGH_MEASURE 10000
 #define TEST_TRIES 10
+#define FINAL_SIZE (int) ((N_MEASURES - DROP_SIZE * 2) * 0.95)
 
 static t_context_t *t;
 
@@ -66,7 +67,7 @@ static void differentiate(int64_t *exec_times,
 
 static void update_statistics(const int64_t *exec_times, uint8_t *classes)
 {
-    for (size_t i = 0; i < N_MEASURES; i++) {
+    for (size_t i = (2 * DROP_SIZE); i < FINAL_SIZE + (2 * DROP_SIZE); i++) {
         int64_t difference = exec_times[i];
         /* CPU cycle counter overflowed or dropped measurement */
         if (difference <= 0)
@@ -116,6 +117,16 @@ static bool report(void)
     return true;
 }
 
+int compare(const void *a, const void *b)
+{
+    return (*(int64_t *) a - *(int64_t *) b);
+}
+
+static void crop_outliner(int64_t *exec_times)
+{
+    qsort(exec_times, N_MEASURES, sizeof(int64_t), compare);
+}
+
 static bool doit(int mode)
 {
     int64_t *before_ticks = calloc(N_MEASURES + 1, sizeof(int64_t));
@@ -133,6 +144,7 @@ static bool doit(int mode)
 
     bool ret = measure(before_ticks, after_ticks, input_data, mode);
     differentiate(exec_times, before_ticks, after_ticks);
+    crop_outliner(exec_times);
     update_statistics(exec_times, classes);
     ret &= report();
 
@@ -159,8 +171,7 @@ static bool test_const(char *text, int mode)
     for (int cnt = 0; cnt < TEST_TRIES; ++cnt) {
         printf("Testing %s...(%d/%d)\n\n", text, cnt, TEST_TRIES);
         init_once();
-        for (int i = 0; i < ENOUGH_MEASURE / (N_MEASURES - DROP_SIZE * 2) + 1;
-             ++i)
+        for (int i = 0; i < ENOUGH_MEASURE / FINAL_SIZE + 1; ++i)
             result = doit(mode);
         printf("\033[A\033[2K\033[A\033[2K");
         if (result)
