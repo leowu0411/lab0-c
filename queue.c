@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "queue.h"
+#include "shuffle.h"
 
 /* Create an empty queue */
 struct list_head *q_new()
@@ -341,4 +342,24 @@ int q_merge(struct list_head *head, bool descend)
     }
     list_splice_tail_init(&finish, head);
     return q_size(list_entry(head->next, queue_contex_t, chain)->q);
+}
+
+void q_shuffle(struct list_head *head)
+{
+    if (!head || list_empty(head) || list_is_singular(head))
+        return;
+    struct list_head new_list;
+    INIT_LIST_HEAD(&new_list);
+    struct list_head *old;
+    int len = q_size(head), random = 0;
+    for (; len > 1; len--) {
+        randombytes((uint8_t *) &random, sizeof(int));
+        random = random % len;
+        for (old = head->next; random > 0; random--)
+            old = old->next;
+        list_del(old);
+        list_add(old, &new_list);
+    }
+    list_splice_tail(&new_list, head);
+    return;
 }
