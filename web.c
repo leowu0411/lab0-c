@@ -234,6 +234,7 @@ char *web_recv(int fd, struct sockaddr_in *clientaddr)
     return ret;
 }
 
+extern int web_connfd;
 int web_eventmux(char *buf)
 {
     fd_set listenset;
@@ -253,7 +254,7 @@ int web_eventmux(char *buf)
         FD_CLR(server_fd, &listenset);
         struct sockaddr_in clientaddr;
         socklen_t clientlen = sizeof(clientaddr);
-        int web_connfd =
+        web_connfd =
             accept(server_fd, (struct sockaddr *) &clientaddr, &clientlen);
 
         char *p = web_recv(web_connfd, &clientaddr);
@@ -261,7 +262,6 @@ int web_eventmux(char *buf)
         web_send(web_connfd, buffer);
         strncpy(buf, p, strlen(p) + 1);
         free(p);
-        close(web_connfd);
         return strlen(buf);
     }
 
