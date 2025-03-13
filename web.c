@@ -237,35 +237,46 @@ char *web_recv(int fd, struct sockaddr_in *clientaddr)
 extern int web_connfd;
 int web_eventmux(char *buf, size_t buflen)
 {
-    fd_set listenset;
+    while (1) {
+        fd_set listenset;
 
-    FD_ZERO(&listenset);
-    FD_SET(STDIN_FILENO, &listenset);
-    int max_fd = STDIN_FILENO;
-    if (server_fd > 0) {
-        FD_SET(server_fd, &listenset);
-        max_fd = max_fd > server_fd ? max_fd : server_fd;
+        FD_ZERO(&listenset);
+        FD_SET(STDIN_FILENO, &listenset);
+        int max_fd = STDIN_FILENO;
+        if (server_fd > 0) {
+            FD_SET(server_fd, &listenset);
+            max_fd = max_fd > server_fd ? max_fd : server_fd;
+        }
+        int result = select(max_fd + 1, &listenset, NULL, NULL, NULL);
+        if (result < 0)
+            return -1;
+
+        if (server_fd > 0 && FD_ISSET(server_fd, &listenset)) {
+            FD_CLR(server_fd, &listenset);
+            struct sockaddr_in clientaddr;
+            socklen_t clientlen = sizeof(clientaddr);
+            web_connfd =
+                accept(server_fd, (struct sockaddr *) &clientaddr, &clientlen);
+
+            char *p = web_recv(web_connfd, &clientaddr);
+            if (strstr(p, "favicon.ico") != NULL) {
+                char *empty_response = "HTTP/1.1 204 No Content\r\n\r\n";
+                web_send(web_connfd, empty_response);
+                free(p);
+                close(web_connfd);
+                web_connfd = -1;
+                continue;
+            }
+            char *buffer =
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+            web_send(web_connfd, buffer);
+            strncpy(buf, p, buflen);
+            buf[buflen] = '\0';
+            free(p);
+            return strlen(buf);
+        }
+
+        FD_CLR(STDIN_FILENO, &listenset);
+        return 0;
     }
-    int result = select(max_fd + 1, &listenset, NULL, NULL, NULL);
-    if (result < 0)
-        return -1;
-
-    if (server_fd > 0 && FD_ISSET(server_fd, &listenset)) {
-        FD_CLR(server_fd, &listenset);
-        struct sockaddr_in clientaddr;
-        socklen_t clientlen = sizeof(clientaddr);
-        web_connfd =
-            accept(server_fd, (struct sockaddr *) &clientaddr, &clientlen);
-
-        char *p = web_recv(web_connfd, &clientaddr);
-        char *buffer = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
-        web_send(web_connfd, buffer);
-        strncpy(buf, p, buflen);
-        buf[buflen] = '\0';
-        free(p);
-        return strlen(buf);
-    }
-
-    FD_CLR(STDIN_FILENO, &listenset);
-    return 0;
 }
