@@ -565,7 +565,7 @@ static bool cmd_done()
  * nfds should be set to the maximum file descriptor for network sockets.
  * If nfds == 0, this indicates that there is no pending network activity
  */
-int web_connfd;
+int web_connfd = -1;
 static int cmd_select(int nfds,
                       fd_set *readfds,
                       fd_set *writefds,
@@ -602,6 +602,11 @@ static int cmd_select(int nfds,
             char *cmdline = readline();
             if (cmdline)
                 interpret_cmd(cmdline);
+        }
+
+        if (web_connfd != -1) {
+            close(web_connfd);
+            web_connfd = -1;
         }
     }
     return 0;
